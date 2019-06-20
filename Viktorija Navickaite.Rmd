@@ -1,0 +1,171 @@
+---
+title: "Egzaminas" #nekeisti
+author: "Viktorija Navickaitė. 1811364" 
+institute: "Vilniaus Universitetas (EVAF)" #nekeisti 
+date: "`r format(Sys.time(), '%Y-%m-%d %H:%M')`"#nekeisti
+output: #nekeisti
+  html_document: #nekeisti
+    number_sections: TRUE #nekeisti
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse = TRUE, error = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Prieš pradedant
+* Ant desktopo sukurkite direktoriją "exam", į ją išsaugokite šį dokumentą pakeisdami jo pavadinimą į "StudNr_Vardas_Pavarde.Rmd" (nenaudokite lt rašmenų) bei atitinkamai pakeisdami viršuje esančius laukelius: "author: ..."
+* Sumegzkite iškart šį dokumentą į .html failą ir įsitikinkite, jog viskas veikia gerai, tik tada pradėkite spręsti uždavinius.
+
+
+# Pasiruošimas
+Šioje kodo dalyje surašykite visus paskesnėse dalyse naudojamus R paketus. Kodas turi patikrinti, ar paketas yra instaliuotas, jeigu ne, instaliuoti bei užloadinti. Jeigu darbo eigoje prireikia naujų paketų, nepamirkite čia juos įrašyti.
+
+```{r, echo=TRUE, message=FALSE}
+if(!require(tidyverse)) install.packages("tidyverse"); require(tidyverse)
+if(!require(eurostat)) install.packages("eurostat"); require(eurostat)
+
+```
+
+
+# Istorija
+Šiuo metu Jūs darbuojatės NVO "Stop skurdas". Koks tai "influenceris" patrolino visuomenę (galimai apmokėtas privačių pensijų fondų), jog Sodroje kaupti pensijai neapsimoka ir kaip pvz. pateikė savo mamulę, gaunančią vos 221 eurą per mėnesį. 
+https://i1.wp.com/lithuanian-economy.net/wp-content/uploads/2019/06/Saugirdas.jpg
+
+
+Komentaruose pasipylė aibė pasisakymų, jog jeigu neturėtume "pašalpinių" armijos ir jiems skirtus pinigus skirtume pensininkams, tai pensininkai gyventų "oriau".  
+
+Jums tokie argumentai sukelia daug abejonių. Kadangi Jūs kažkaip išgyvenote  duomenų analizės įvadą, Jūs nusprendžiate pateikti tam tikrus faktus viešai diskusijai. Šių faktų generavimas ir yra Jūsų egzamino užduotis.
+
+
+## Duomenų importas
+Importuokite duomenis iš eurostat apie tai, kiek Lietuva (visas valdžios sektorius) ir ES-28 skiria % BVP socialinei paramai. Kadangi datasetas yra didelis, rekomenduoju parsisiųsti tik reikalingus duomenis. 
+
+[Pagalba: "gov_10a_exp", reikalingos išlaidų rūšys "Social protection", "Old age", "Sickness and disability"]
+
+```{r}
+gov_10a_exp <- get_eurostat("gov_10a_exp", stringsAsFactors = FALSE)
+df <- gov_10a_exp %>% filter(cofog99 %in% c("GF10","GF1002","GF1001"),unit == "PC_GDP", na_item == "TE", sector == "S13", geo %in% c("LT", "EU28"))
+                             
+                             
+```
+
+
+## Duomenų apdorojimas
+Kadangi "pašalpiniai" gauna įvairią socialinę pagalbą (pvz., lengvatas būsto šildymui, vaikų maitinimui mokykloje ir t.t.), šioje dalyje pabandysime iš visų išlaidų socialinei apsaugai atimti pensijas ir ligos pašalpas, o likutį pavadinsime `pasalpa`. 
+
+Sukurkite nauja dataframe objektą, kuriame būtų LT ir EU28 laiko eilutės (nuo 2004 metų) su 2 išlaidų sritimis: pasalpa (kurią apskaičiavote) bei išlaidomis pensijoms.
+
+
+```{r}
+gg <- df %>% filter(time >= "2004-01-01")
+wide_data <- gg %>% spread(cofog99, values)  
+dataa <- data.frame(wide_data %>% select(4:8))
+pasalpa <- (wide_data$GF10-wide_data$GF1001-wide_data$GF1002)
+pasalpa <- data.frame(wide_data$GF10-wide_data$GF1001-wide_data$GF1002, time = wide_data$time, geo = wide_data$geo)
+names(pasalpa)[names(pasalpa)=="wide_data.GF10...wide_data.GF1001...wide_data.GF1002"] <- "pasalpa"
+
+names(dataa)[names(dataa)=="GF1002"] <- "pensija"
+dataframe1 <- data.frame(dataa %>% select(1,2,5))
+dataframe2 <- merge(x = pasalpa, y = dataframe1, by = c("time", "geo"), all = TRUE)
+
+
+```
+
+
+
+
+
+## Nubraižykite grafiką
+
+* Nubraižykite prieš tai žingsnyje apdorotus duomenis linijine diagrama su taškais (shape) 
+* Spalvą priskirkite geo
+* Taškų (shape) formą priskirkite išlaidų rūšims. 
+* Tikėtina Jums reikės googlinti arba ieškoti stackoverflow, kaip pranešti ggplot2, kaip yra sugrupuoti duomenys (jeigu norite jog visos 4 linijos būtų viename grafike), alternatyviai galite skaidyti grafiką į dvi dalis, pagal išlaidų rūšis (tada skaidymas turi vykti naudojant vieną iš ggplot2 komandų)
+* Nepamirškite tvarkingo apipavidalinimo (ašys, antraštės ir t.t.)
+
+```{r}
+ggplot(gg, aes(x=time, y=values))+
+  geom_line(aes(col=geo), shape = 3)+
+  geom_point()+
+  scale_x_date(date_labels = "%Y", date_breaks = "1 year")+
+  labs(x = "Time", y = "values",title ="LT ir EU28 laiko eilutės (nuo 2004 metų) su 2 išlaidų sritimis", subtitle = "Šaltinis: Eurostat (gov_10a_exp)")
+
+```
+
+
+
+## Apskaičiuokite
+
+Taip pat, Jūs nusprendėte pateikti lentelę, kurioje būtų matyti kiek % BVP pensijoms ir pašalpoms skyrė EU28 ir Lietuva 2017m.
+Visgi vien tik procentinės išraiškos nėra labai informatyvios, tad Jūs nusprendžiate pateikite lentelę (dataframe pageidautiną perleistą į lentelių formavimo komandą) susidedančią iš 2 eilučių (cofog99) ir 4 stulpelių:
+
+* ES28 išlaidos % BVP
+* LT išlaidos % BVP
+* skirtumas procentiniais punktais (primenu, 1.9%-1.5%=0.4 proc.punkto)
+* trečio stulpelio reikšmes sudauginkite su Lietuvos 2017m BVP (= 41857 mln eur), nes norite žinoti, kiek mln eurų reiktų skirti šioms sritims, tam kad pasiektume ES vidurkį
+* PERSPĖJIMAS: kai skaičiuosite reikalingas lėšas, pasitikrinkite, ar teisingai skaičiuojate  kai sudauginate su proc. punktais! :)
+
+```{r}
+gov_10a_exp <- get_eurostat("gov_10a_exp", stringsAsFactors = FALSE)
+df5 <- gov_10a_exp %>% filter(cofog99 %in% c("GF10","GF1002","GF1001"),unit == "PC_GDP", geo %in% c("LT", "EU28", time == "2017-01-01"))
+```
+
+
+## Grafikas 2 
+
+Pastebėję, jog socialinės išlaidos pakankamai skiriasi tarp LT is ES28, Jūs nusprendėte nubraižyti stulpelinį grafiką, kuriame būtų pavaizduotos visų ES (t.y. 28!) šalių išlaidos socialiniai sričiai bendrai ("Social protection") % nuo BVP. Naudokite 2017 metų rodiklius. Tam jog matytųsi ES28 vidurkis nubraižykite jį į grafiką kaip horizontalią liniją.
+
+Jums gali reikėti atsisiųsti reikiamą Eurostat dataset iš naujo. 
+Stulpeliai turėtų būti surikiuoti didėjančia tvarka, jų viršuje pateikiamos  stulpelių reikšmės.
+
+Grafikas turėtų atrodyti daugmaž taip: https://i2.wp.com/lithuanian-economy.net/wp-content/uploads/2019/03/private_expenditue_MTEP_2017.jpeg?resize=768%2C427
+
+
+```{r}
+gov_10a_exp <- get_eurostat("gov_10a_exp", stringsAsFactors = FALSE)
+df1 <- gov_10a_exp %>% filter(cofog99 =="GF10",unit == "PC_GDP", time == "2017-01-01", geo %in% c("BE", "BG", "CZ", "DK", "DE", "EE", "IE", "EL", "ES", "FR", "HR", "IT", "CY", "LV", "LT", "LU", "HU", "MT", "NL", "AT", "PL", "PT", "RO", "SI", "SK", "FI", "SE", "UK"), na_item == "TE", sector == "S13)
+
+a <- mean(df1$values)
+
+ggplot(df1, aes(x=reorder(geo,values), y=values))+
+  geom_bar(stat="identity", fill= "steel blue"")+
+  geom_text(aes(label= values), vjust= -0.3)+
+  labs(x = "Šalis", y = "BVP", title = "ES šalių išlaidos socialiniai sričiai bendrai nuo BVP", subtitle = "gov_10a_exp")+
+geom_hline(aes(yintercept = a))
+
+
+```
+
+
+## Vertinimas
+Pateikite trumpą situacijos vertinimą remiantis iki šiol atlikta duomenų analizę. Pateikite savo įžvalgas, kaip būtų galima spręsti žemų pensijų  problemas ateityje. Drąsiai galite remtis Europos Komisijos ataskaita bei rekomendacijomis Lietuvai. 
+
+* Rekomendacija: https://ec.europa.eu/info/sites/info/files/file_import/2019-european-semester-country-specific-recommendation-commission-recommendation-lithuania_en.pdf
+* Ataskaita : https://ec.europa.eu/info/sites/info/files/file_import/2019-european-semester-country-report-lithuania_lt.pdf
+
+```{r, eval=TRUE}
+#Parašykite apie 200 (+- 20) žodžių. 
+#Rašykite VIETOJ Lore ipsum... teksto t.y. tarpe tarp abiejų kabučių.
+#Jeigu norite žinoti kiek žodžių parašėte, galite runninti tik šit snippet' jo kampytyje nuspaudę ant žalio trikampio rodančio į dešinę
+
+str1 <- 
+"
+Lietuvoje egzistuojančią pensijų sistemą paskatino keisti ekonominės priežastys. Visuomenės senėjimas ir gimstamumo mažėjimas yra demografinės priežastys, skatinusios keisti egzistavusį pensijų sistemos modelį. Pastaraisiais metais pensijimio amžiaus ir darbingo amžiaus žmonių santykis didėjo. Remiantis ES Komisijos ateities prognozėmis ES valstybėse ir toliau vystysis visuomenės senėjimo tendencijos.Iki 2050 m. pensijinio amžiaus ir darbingo amžiaus asmenų santykis išaugs daugiau nei 2 kartus. Tad pencininkų atsiras kur kas daugiau.  Norint užtikrinti finansinį tvarumą reikia mažini išlaidas. o tai reiškia, kad reikia mažinti ir pencijas. Bet vis dėlto galima sušvelninti šią problemą. Dalį problemų galima įveikti diversifikuojant pensijų sistemą, keičiant jos finansavimo ir valdymo principus. Tinkamos pensijų sistemos struktūros pasirinkimaS, kaip ir minėjau, gali jas tik sušvelninti, bet ne panaikinti. Turint perskirstomąją dalį, pagrįstą individualiu taupymu, galima sušvelninti blogėjančios demografinės padėties
+poveikį pensijų sistemai. Skirtingų finansavimo principų derinimas leis minimaliai apsaugoti skurdžiausius gyventojus ir, nedidinat įmokų, užtikrinti didesnes išmokas sistemos dalyviams, tai yra padidinti darbo užmokesčio pakeitimo pensijų koeficientą. Taip pat, siūloma įdiegti pensijų fondus.Šio fondo tikslas pakeisti pencijų sistemą taip, kad pencininkai gautų didesmes pajamas nei iki šiol. Žmonės, kurie kaups daugiau nei numatytieji 3 proc., galės pasinaudoti gyventojų pajamų mokesčio lengvata – šių įmokų dydžiu bus mažinamos apmokestinamosios pajamos, vadinasi, deklaravus pajamas bus galima susigrąžinti dalį sumokėto gyventojų pajamų mokesčio.
+
+
+"
+sapply(strsplit(str1," "),length)
+```
+
+
+
+
+
+
+
+## Darbo užbaigimo ir ship'inimo instrukcija:
+* Sumegzkite šį dokumentą į `html`, jeigu Jūsų kode yra klaidų ir sumezgimas neveikia, išsaugokite šį failą tiesiog "File -> save"
+* Savo Github paskyroje sukurkite repo "exam"
+* Pushinkit lokalią repo į Github. Direktorijoje turi būti 2 failai: "StudNr_Vardas_Pavardė.Rmd" ir "StudNr_Vardas_Pavardė.html"
+* Įsitikinkite jog Githube guli repo kopija ir repo url įrašykite į google docs J stulpelį: https://docs.google.com/spreadsheets/d/1H_ts3wTKYZ4rocmFseR2YJtZHfhJ543MUWsTTa7x5Kc/edit?usp=sharing
